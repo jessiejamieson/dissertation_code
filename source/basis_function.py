@@ -1,4 +1,3 @@
-import attr
 import scipy.integrate as integrate
 
 
