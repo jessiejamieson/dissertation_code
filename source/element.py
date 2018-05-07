@@ -87,8 +87,8 @@ class Element(object):
 
             Args:
                 index      := index
-                num_points := num_points
-                delta_x    := delta_x
+                num_points := number of points
+                delta_x    := distance between points
 
             Returns:
                 fully built element
