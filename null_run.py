@@ -27,11 +27,15 @@ if __name__ == '__main__':
     init_z0 = initial.InitZ0()
     init_z1 = initial.InitZ1()
 
+    init_storage_w = None
+    init_storage_z = None
+
     system = null.NullControl.setup(num_points, delta_x,
                                     num_steps, delta_t,
                                     gamma, rho, T,
                                     init_v, init_w, init_z0, init_z1,
-                                    use_null, use_coupling)
+                                    use_null, use_coupling,
+                                    init_storage_w, init_storage_z)
 
     solution, e_z, e_w, e_t, storage_z, storage_w = system.run()
 

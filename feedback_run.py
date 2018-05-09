@@ -33,8 +33,8 @@ if __name__ == '__main__':
     g2 = initial.G2()
     m = initial.M()
 
-    storage_w = None
-    storage_z = None
+    init_storage_w = None
+    init_storage_z = None
 
     system = feedback.FeedbackControl.setup(num_points, delta_x,
                                             num_steps, delta_t,
@@ -44,7 +44,7 @@ if __name__ == '__main__':
                                             use_feedback, use_coupling,
                                             use_reverse,
                                             epsilon, max_steps,
-                                            storage_w, storage_z)
+                                            init_storage_w, init_storage_z)
 
     solution, e_z, e_w, e_t, storage_z, storage_w = system.run()
 

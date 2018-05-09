@@ -35,12 +35,18 @@ class NullControl(object):
 
             _use_null     := turn on and off null control
             _use_coupling := turn on and off coupling
+
+            _storage_w := reverse control pre computed values for w
+            _storage_z := reverse control pre computed values for z
+
+            _is_forward := Determine reverse state
     """
 
     def __init__(self, num_points, delta_x, num_steps, delta_t,
                  gamma, rho, T,
                  init_v, init_w, init_z0, init_z1,
-                 use_null, use_coupling):
+                 use_null, use_coupling,
+                 storage_w, storage_z):
         self._num_points = num_points
         self._delta_x = delta_x
         self._num_steps = num_steps
@@ -58,17 +64,27 @@ class NullControl(object):
         self._use_null = use_null
         self._use_coupling = use_coupling
 
+        self._storage_w = storage_w
+        self._storage_z = storage_z
+
+        if storage_w is None:
+            self._is_forward = True
+        else:
+            self._is_forward = False
+
     @classmethod
     def setup(cls, num_points, delta_x, num_steps, delta_t,
               gamma, rho, T,
               init_v, init_w, init_z0, init_z1,
-              use_null, use_coupling):
+              use_null, use_coupling,
+              storage_w, storage_z):
         """Setup the system completely"""
 
         new = cls(num_points, delta_x, num_steps, delta_t,
                   gamma, rho, T,
                   init_v, init_w, init_z0, init_z1,
-                  use_null, use_coupling)
+                  use_null, use_coupling,
+                  storage_w, storage_z)
         new._build()
 
         return new
@@ -573,8 +589,8 @@ class NullControl(object):
 
         return np.reshape(null, (2 * self.vec_num_points, ))
 
-    def control_w(self, t, w):
-        """Determines the control term for w
+    def control_w_forward(self, t, w):
+        """Determines the forward control term for w
 
             Args:
                 t := current timestep value
@@ -592,6 +608,68 @@ class NullControl(object):
             null = [0.0, 0.0, 0.0, 0.0]
 
             return w, null
+
+    def control_w_reverse(self, t, w):
+        """Determines the reverse control term for w
+
+            Args:
+                t := current timestep value
+                w := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        null = self._storage_w.pop()
+
+        return w - null, null
+
+    def control_w(self, t, w):
+        """Determines the control term for w
+
+            Args:
+                t := current timestep value
+                w := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        if self._is_forward:
+            return self.control_w_forward(t, w)
+        else:
+            return self.control_w_reverse(t, w)
+
+    def control_z_reverse(self, t, z):
+        """Determines the reverse control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        null = self._storage_z.pop()
+
+        return z - null, null
+
+    def control_z(self, t, z):
+        """Determines the control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                z modified by the control term
+        """
+
+        if self._is_forward:
+            return self.control_z_forward(t, z)
+        else:
+            return self.control_z_reverse(t, z)
 
     def _build_m_z_inv(self):
         """Build the inverse of M for z-system"""
@@ -729,8 +807,8 @@ class NullControl(object):
 
         return B * u
 
-    def control_z(self, t, z):
-        """Determines the control term for z
+    def control_z_forward(self, t, z):
+        """Determines the forward control term for z
 
             Args:
                 t := current timestep value
