@@ -108,13 +108,24 @@ class FeedbackControl(object):
 
             _use_feedback := turn on and off feedback
             _use_coupling := turn on and off coupling
+            _use_reverse  := turn on and off reverse system
+
+            _epsilon   := feedback target energy is less than this
+            _max_steps := max_steps to attempt to achieve target
+
+            _storage_w := reverse control pre computed values for w
+            _storage_z := reverse control pre computed values for z
+
+            _is_forward := Determine reverse state
     """
 
     def __init__(self, num_points, delta_x, num_steps, delta_t,
                  gamma, rho,
                  init_v, init_w, init_z0, init_z1,
                  g1, g2, m,
-                 use_feedback, use_coupling):
+                 use_feedback, use_coupling, use_reverse,
+                 epsilon, max_steps,
+                 storage_w, storage_z):
         self._num_points = num_points
         self._delta_x = delta_x
         self._num_steps = num_steps
@@ -134,20 +145,36 @@ class FeedbackControl(object):
 
         self._use_feedback = use_feedback
         self._use_coupling = use_coupling
+        self._use_reverse = use_reverse
+
+        self._epsilon = epsilon
+        self._max_steps = max_steps
+
+        self._storage_w = storage_w
+        self._storage_z = storage_z
+
+        if storage_w is None:
+            self._is_forward = True
+        else:
+            self._is_forward = False
 
     @classmethod
     def setup(cls, num_points, delta_x, num_steps, delta_t,
               gamma, rho,
               init_v, init_w, init_z0, init_z1,
               g1, g2, m,
-              use_feedback, use_coupling):
+              use_feedback, use_coupling, use_reverse,
+              epsilon, max_steps,
+              storage_w, storage_z):
         """Setup the system completely"""
 
         new = cls(num_points, delta_x, num_steps, delta_t,
                   gamma, rho,
                   init_v, init_w, init_z0, init_z1,
                   g1, g2, m,
-                  use_feedback, use_coupling)
+                  use_feedback, use_coupling, use_reverse,
+                  epsilon, max_steps,
+                  storage_w, storage_z)
         new._build()
 
         return new
@@ -603,8 +630,8 @@ class FeedbackControl(object):
 
         return np.reshape(value, (2 * self.vec_num_points, ))
 
-    def control_w(self, t, w):
-        """Determines the control term for w
+    def control_w_forward(self, t, w):
+        """Determines the forward control term for w
 
             Args:
                 t := current timestep value
@@ -622,6 +649,37 @@ class FeedbackControl(object):
             feedback = [0.0, 0.0, 0.0, 0.0]
 
             return w, feedback
+
+    def control_w_reverse(self, t, w):
+        """Determines the reverse control term for w
+
+            Args:
+                t := current timestep value
+                w := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        feedback = self._storage_w.pop()
+
+        return w + feedback, feedback
+
+    def control_w(self, t, w):
+        """Determines the control term for w
+
+            Args:
+                t := current timestep value
+                w := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        if self._is_forward:
+            return self.control_w_forward(t, w)
+        else:
+            return self.control_w_reverse(t, w)
 
     def _build_n_z(self):
         """Builds the N_z vector
@@ -668,8 +726,8 @@ class FeedbackControl(object):
 
         return np.concatenate((bottom, top))
 
-    def control_z(self, t, z):
-        """Determines the control term for z
+    def control_z_forward(self, t, z):
+        """Determines the forward control term for z
 
             Args:
                 t := current timestep value
@@ -687,6 +745,37 @@ class FeedbackControl(object):
             feedback = [0.0, 0.0, 0.0, 0.0]
 
             return z, feedback
+
+    def control_z_reverse(self, t, z):
+        """Determines the reverse control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                z modified by the control term
+        """
+
+        feedback = self._storage_z.pop()
+
+        return z + feedback, feedback
+
+    def control_z(self, t, z):
+        """Determines the control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                z modified by the control term
+        """
+
+        if self._is_forward:
+            return self.control_z_forward(t, z)
+        else:
+            return self.control_z_reverse(t, z)
 
     def _build_a200_w(self):
         """Build the A_200 tensor for w-system"""
@@ -909,7 +998,7 @@ class FeedbackControl(object):
 
         return e_z, e_w, e_z + e_w
 
-    def run(self):
+    def run_normal(self):
         """Run the solver"""
 
         storage_z = []
@@ -945,3 +1034,61 @@ class FeedbackControl(object):
             e_z[index + 1], e_w[index + 1], e_t[index + 1] = self.energy(new)
 
         return solution, e_z, e_w, e_t, storage_z, storage_w
+
+    def run_reverse(self):
+        """Run the solver forward for reverse control"""
+
+        storage_z = []
+        storage_w = []
+
+        solution = np.zeros((self._max_steps + 1, 4 * self.vec_num_points))
+        solution[0, :] = np.concatenate((self.init_z, self.init_w))
+
+        e_z = np.zeros((self._max_steps + 1, 1))
+        e_w = np.zeros((self._max_steps + 1, 1))
+        e_t = np.zeros((self._max_steps + 1, 1))
+
+        e_z[0], e_w[0], e_t[0] = self.energy(solution[0, :])
+
+        if self._use_feedback:
+            step_str = "Step feedback: "
+        else:
+            step_str = "Step: "
+
+        t = 0.0
+        count = 0
+        e_c = e_t[0]
+        while (e_c > self._epsilon) and (count < self._max_steps):
+            t += self._delta_t
+            u = solution[count, :]
+
+            count += 1
+            print(step_str + str(count))
+
+            new, s_z, s_w = self.step(t, u)
+
+            solution[count, :] = new
+            storage_z.extend(s_z)
+            storage_w.extend(s_w)
+
+            e_z[count], e_w[count], e_t[count] = self.energy(new)
+
+            e_c = e_t[count]
+
+        solution_trim = solution[:count]
+
+        e_z_trim = e_z[:count]
+        e_w_trim = e_w[:count]
+        e_t_trim = e_t[:count]
+
+        return solution_trim, e_z_trim, e_w_trim, e_t_trim, storage_z, storage_w
+
+    def run(self):
+        """Choose correct run system"""
+
+        if self._use_reverse:
+            print("Running reverse feedback calculation")
+            return self.run_reverse()
+        else:
+            print("Running calculation")
+            return self.run_normal()
