@@ -6,6 +6,15 @@ from source import finite_elements as fem
 from source import solver
 
 
+class OnesFunction(object):
+    """Class to contain the ones-function system"""
+
+    def __call__(self, x):
+        """Return the value of the function"""
+
+        return 1.0
+
+
 class NullControl(object):
     """Class to contain the null control system
 
@@ -32,7 +41,7 @@ class NullControl(object):
     """
 
     def __init__(self, num_points, delta_x, num_steps, delta_t,
-                 gamma, rho,
+                 gamma, rho, T,
                  init_v, init_w, init_z0, init_z1,
                  g1, g2, m,
                  use_null, use_coupling):
@@ -43,6 +52,7 @@ class NullControl(object):
 
         self._gamma = gamma
         self._rho = rho
+        self._T = T
 
         self._init_v = init_v
         self._init_w = init_w
@@ -58,14 +68,14 @@ class NullControl(object):
 
     @classmethod
     def setup(cls, num_points, delta_x, num_steps, delta_t,
-              gamma, rho,
+              gamma, rho, T,
               init_v, init_w, init_z0, init_z1,
               g1, g2, m,
               use_null, use_coupling):
         """Setup the system completely"""
 
         new = cls(num_points, delta_x, num_steps, delta_t,
-                  gamma, rho,
+                  gamma, rho, T,
                   init_v, init_w, init_z0, init_z1,
                   g1, g2, m,
                   use_null, use_coupling)
@@ -114,16 +124,22 @@ class NullControl(object):
         self._build_init_z0()
         self._build_init_z1()
         self._build_init_z()
-        #
-        # print("Build the feedback_w")
-        # self._build_n_square_w()
-        # self._build_n_cube_w()
-        # self._build_f_plus_w()
-        # self._build_n_w()
-        #
-        # print("Build the feedback_z")
-        # self._build_n_z()
-        # self._build_f_plus_z()
+
+        print("Build the null_w")
+        self._build_m_w_inv()
+        self._build_f_plus_w()
+        self._build_n_w()
+        self._build_b_w()
+        self._build_abf_w()
+        self._build_y0_w()
+
+        print("Build the null_z")
+        self._build_m_z_inv()
+        self._build_n_z()
+        self._build_f_plus_z()
+        self._build_b_z()
+        self._build_abf_z()
+        self._build_y0_z()
         #
         # print("Build the coupling_z")
         # self._build_a110_z()
@@ -424,3 +440,319 @@ class NullControl(object):
             vec = lin.spsolve(M, vec)
 
             self.init_z = vec
+
+    def _build_m_w_inv(self):
+        """Build the inverse of M_w for w-system control"""
+
+        M = self.M_w.copy()
+
+        self.M_w_inv = lin.inv(M).tocsc()
+
+    def _build_f_plus_w(self):
+        """Build the F_plus for the w-system"""
+
+        F = np.zeros((2, self.vec_num_points))
+
+        F[0, self.vec_num_points - 1] = 1.0
+        F[1, self._num_points - 1] = 1.0
+
+        self.F_plus_w = F
+
+    def _build_n_w(self):
+        """Build the N_w matrix"""
+
+        F = self.F_plus_w.copy()
+        B = self.A_22_w.copy()
+
+        A = -self._gamma**2 * B
+        A_inv = lin.inv(A)
+
+        Nt = F * A_inv
+
+        N = Nt.transpose()
+        fill = np.zeros(N.shape)
+
+        self.N_w = np.concatenate((N, fill), axis=0)
+
+    def _build_b_w(self):
+        """Build the B matrix for null control in w-system"""
+
+        N = self.N_w.copy()
+        B = self.A_22_w.copy()
+        fill = np.zeros(B.shape)
+
+        A = sp.bmat([[B,    None],
+                     [None, fill]]).tocsc()
+
+        self.B_w = A * N
+
+    def _build_abf_w(self):
+        """Build the ABF (exponent) for the exp function for
+            w-system control
+
+            ABF_w = M_w^-1 (A_w + B_w*F_plus_w)
+        """
+
+        A = self.A_w.copy()
+        B = self.B_w.copy()
+        F = self.F_plus_w.copy()
+        M = self.M_w_inv.copy()
+
+        BF = sp.csc_matrix(np.matmul(B, F))
+        ABF = A + BF
+
+        self.ABF_w = M * ABF
+
+    def exp_w(self, t):
+        """Computes e^(A + BF)t for w-system:
+
+            f(t) = exp(inv(M_w)(A_w + B_w * F_plus_w)t )
+
+            Args:
+                t := time
+
+            Returns
+                f(t)
+        """
+
+        ABF = self.ABF_w
+        exp = ABF * t
+
+        return lin.expm(exp)
+
+    def _build_y0_w(self):
+        """Build the y0 term for w-system control"""
+
+        I = sp.identity(2 * self.vec_num_points)
+        A = self.A_w.copy()
+        M = self.M_w_inv.copy()
+        T = self._T
+        MA = M * A
+
+        exp_ABF_T = self.exp_w(T)
+        exp_A_T = lin.expm(-T * MA)
+        exp = exp_A_T * exp_ABF_T
+        I_exp = I - exp
+
+        y0 = self.init_w.copy()
+        y0_new = np.reshape(y0, (2 * self.vec_num_points, 1))
+
+        sol = lin.spsolve(I_exp, y0_new)
+
+        self.y0_w = np.reshape(sol, (2 * self.vec_num_points, 1))
+
+    def u_w(self, t):
+        """Computes the u(t) term for the w-system control
+
+            u(t) = F_plus_w * exp_w(t) * y0_w
+
+            Args:
+                t := time
+
+            Returns:
+                u(t)
+        """
+
+        F = self.F_plus_w
+        y0 = self.y0_w
+        exp = self.exp_w(t)
+
+        prod = F * exp
+
+        return np.matmul(prod, y0)
+
+    def null_w(self, t):
+        """Computes the null control term for w-system
+
+            N(t) = B_w * u_w(t)
+
+            Args:
+                t := time
+
+            Returns:
+                N(t)
+        """
+
+        B = self.B_w
+        u = self.u_w(t)
+
+        null = np.matmul(B, u)
+
+        return np.reshape(null, (2 * self.vec_num_points, ))
+
+    def control_w(self, t, w):
+        """Determines the control term for w
+
+            Args:
+                t := current timestep value
+                w := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        if self._use_null:
+            null = self.null_w(t)
+
+            return w + null, null
+        else:
+            null = [0.0, 0.0, 0.0, 0.0]
+
+            return w, null
+
+    def _build_m_z_inv(self):
+        """Build the inverse of M for z-system"""
+
+        M = self.M_z.copy()
+
+        self.M_z_inv = lin.inv(M).tocsc()
+
+    def _build_n_z(self):
+        """Builds the N_z vector
+
+            l2 projection of ones-function
+        """
+
+        f = OnesFunction()
+
+        self.N_z = self._fem.l2_project(f, identify=False)
+
+    def _build_f_plus_z(self):
+        """Builds the F_plus vector for z-system"""
+
+        N = self.N_z.copy()
+        A = self.A_10_z.copy().transpose().tocsc()
+
+        prod = np.transpose(-N) * A
+
+        left = np.zeros((1, self.vec_num_points))
+        right = np.reshape(prod, (1, self.vec_num_points))
+
+        self.F_plus_z = -np.concatenate((left, right), axis=1)
+
+    def _build_b_z(self):
+        """Builds the B matrix for z-system control
+
+            B = -[0, A_10_z * N_z]^t
+        """
+
+        A = self.A_10_z.copy()
+        N = self.N_z.copy()
+
+        fill = np.zeros((self.vec_num_points, ))
+        b = A * N
+
+        self.B_z = np.concatenate((fill, b))
+
+    def _build_abf_z(self):
+        """Build the ABF (exponent) for the exp function for
+            z-system control
+
+            ABF_z = M_z^-1 (A_z + B_z*F_plus_z)
+        """
+
+        A = self.A_z.copy()
+        B = self.B_z.copy()
+        F = self.F_plus_z.copy()
+        M = self.M_z_inv.copy()
+
+        BF = sp.csc_matrix(B * F)
+        ABF = A + BF
+
+        self.ABF_z = M * ABF
+
+    def exp_z(self, t):
+        """Computes e^(A + BF)t for z-system:
+
+            f(t) = exp(inv(M_z)(A_z + B_z * F_plus_z)t )
+
+            Args:
+                t := time
+
+            Returns
+                f(t)
+        """
+
+        ABF = self.ABF_z
+        exp = ABF * t
+
+        return lin.expm(exp)
+
+    def _build_y0_z(self):
+        """Build the y0 term for z-system control"""
+
+        I = sp.identity(2 * self.vec_num_points)
+        A = self.A_z.copy()
+        M = self.M_z_inv.copy()
+        T = self._T
+        MA = M * A
+
+        exp_ABF_T = self.exp_z(T)
+        exp_A_T = lin.expm(-T * MA)
+        exp = exp_A_T * exp_ABF_T
+        I_exp = (I - exp).tocsc()
+
+        y0 = self.init_z.copy()
+
+        sol = lin.spsolve(I_exp, y0)
+
+        self.y0_z = np.reshape(sol, (2 * self.vec_num_points, 1))
+
+    def u_z(self, t):
+        """Computes the u(t) term for the z-system control
+
+            u(t) = F_plus_z * exp_z(t) * y0_z
+
+            Args:
+                t := time
+
+            Returns:
+                u(t)
+        """
+
+        F = self.F_plus_z
+        y0 = self.y0_z
+        exp = self.exp_z(t)
+
+        prod = F * exp
+
+        return np.matmul(prod, y0)[0, 0]
+
+    def null_z(self, t):
+        """Computes the null control term for z-system
+
+            N(t) = B_z * u_z(t)
+
+            Args:
+                t := time
+
+            Returns:
+                N(t)
+        """
+
+        B = self.B_z
+        u = self.u_z(t)
+
+        null = np.matmul(B, u)
+
+        return np.reshape(null, (2 * self.vec_num_points, ))
+
+    def control_z(self, t, z):
+        """Determines the control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                z modified by the control term
+        """
+
+        if self._use_null:
+            null = self.null_z(t)
+
+            return z + null, null
+        else:
+            null = [0.0, 0.0, 0.0, 0.0]
+
+            return z, null
