@@ -135,6 +135,23 @@ class FeedbackControl(object):
         self._use_feedback = use_feedback
         self._use_coupling = use_coupling
 
+    @classmethod
+    def setup(cls, num_points, delta_x, num_steps, delta_t,
+              gamma, rho,
+              init_v, init_w, init_z0, init_z1,
+              g1, g2, m,
+              use_feedback, use_coupling):
+        """Setup the system completely"""
+
+        new = cls(num_points, delta_x, num_steps, delta_t,
+                  gamma, rho,
+                  init_v, init_w, init_z0, init_z1,
+                  g1, g2, m,
+                  use_feedback, use_coupling)
+        new._build()
+
+        return new
+
     @property
     def vec_num_points(self):
         """Get the number of points in a vec"""
@@ -191,6 +208,7 @@ class FeedbackControl(object):
         self._build_a110_z()
 
         print("Build the coupling_w")
+        self._build_a200_w()
 
     def _build_solver(self):
         """Build the time-solver"""
@@ -290,7 +308,7 @@ class FeedbackControl(object):
             A_11 -> identified for B.C.s
         """
 
-        A = self._fem.A_11.copy().totlil()
+        A = self._fem.A_11.copy().tolil()
 
         self.identify_matrix(A, 0)
         self.identify_matrix(A, self._num_points)
@@ -486,7 +504,14 @@ class FeedbackControl(object):
             self.init_z = vec
         else:
             M = self.M_z.copy()
-            self.init_z = lin.spsolve(M, vec)
+            vec = lin.spsolve(M, vec)
+
+            vec[0] = 0.0
+            vec[self._num_points] = 0.0
+            vec[2 * self._num_points] = 0.0
+            vec[3 * self._num_points] = 0.0
+
+            self.init_z = vec
 
     def _build_n_square_w(self):
         """Builds the N_w vector corresponding to the square function"""
@@ -530,7 +555,7 @@ class FeedbackControl(object):
         F_plus = self.F_plus_w.copy()
         B = self.A_22_w.copy()
 
-        Bt = B.transpose()
+        Bt = B.transpose().tocsc()
         Bt_inv = lin.inv(Bt)
         Nt = F_plus * Bt_inv
 
@@ -574,7 +599,9 @@ class FeedbackControl(object):
         left = np.zeros((self.vec_num_points, 1))
         right = np.matmul(N, g_w)
 
-        return np.concatenate((left, right))
+        value = np.concatenate((left, right))
+
+        return np.reshape(value, (2 * self.vec_num_points, ))
 
     def control_w(self, t, w):
         """Determines the control term for w
@@ -709,6 +736,7 @@ class FeedbackControl(object):
         if self._use_coupling:
             coupling = self._coupling_w(z, w)
             return v + coupling
+            # return v
         else:
             return v
 
@@ -734,6 +762,7 @@ class FeedbackControl(object):
         zeros = np.zeros((self.vec_num_points, ))
 
         for index, A_k in enumerate(array):
+            A = A_k.toarray()
             A = A_k.tocsc()
             temp = A * w
             coupling[index] = np.dot(v, temp)
@@ -755,6 +784,7 @@ class FeedbackControl(object):
         if self._use_coupling:
             coupling = self._coupling_z(w)
             return z + coupling
+            # return z
         else:
             return z
 

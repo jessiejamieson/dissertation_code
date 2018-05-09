@@ -620,7 +620,7 @@ class FiniteElements(object):
                 LLL_110 for element of index
         """
 
-        return self._elements[index].LLL_110
+        return self._elements[index].LHH_110
 
     def _local_lhh_200(self, index):
         """Gets the local LLL_200 array from element of index
@@ -632,7 +632,7 @@ class FiniteElements(object):
                 LLL_200 for element of index
         """
 
-        return self._elements[index].LLL_200
+        return self._elements[index].LHH_200
 
     def _local_hll_110(self, index):
         """Gets the local HLL_110 array from element of index
