@@ -24,6 +24,8 @@ class NullControl(object):
             _num_steps  := number of time steps to take
             _delta_t    := amount of time to take in one timestep
 
+            _gamma := constant for w-system
+            _rho   := constant for w-system
             _T := null control target time
 
             _init_v  := initial condition for v
@@ -31,24 +33,21 @@ class NullControl(object):
             _init_z0 := initial condition for z0
             _init_z1 := initial condition for z1
 
-            _g1 := feedback function for z-system
-            _g2 := feedback function for w-system
-            _m  := feedback function for w-system
-
             _use_null     := turn on and off null control
             _use_coupling := turn on and off coupling
     """
 
     def __init__(self, num_points, delta_x, num_steps, delta_t,
-                 T,
+                 gamma, rho, T,
                  init_v, init_w, init_z0, init_z1,
-                 g1, g2, m,
                  use_null, use_coupling):
         self._num_points = num_points
         self._delta_x = delta_x
         self._num_steps = num_steps
         self._delta_t = delta_t
 
+        self._gamma = gamma
+        self._rho = rho
         self._T = T
 
         self._init_v = init_v
@@ -56,25 +55,19 @@ class NullControl(object):
         self._init_z0 = init_z0
         self._init_z1 = init_z1
 
-        self._g1 = g1
-        self._g2 = g2
-        self._m = m
-
         self._use_null = use_null
         self._use_coupling = use_coupling
 
     @classmethod
     def setup(cls, num_points, delta_x, num_steps, delta_t,
-              T,
+              gamma, rho, T,
               init_v, init_w, init_z0, init_z1,
-              g1, g2, m,
               use_null, use_coupling):
         """Setup the system completely"""
 
         new = cls(num_points, delta_x, num_steps, delta_t,
-                  T,
+                  gamma, rho, T,
                   init_v, init_w, init_z0, init_z1,
-                  g1, g2, m,
                   use_null, use_coupling)
         new._build()
 
@@ -448,7 +441,7 @@ class NullControl(object):
     def _build_f_plus_w(self):
         """Build the F_plus for the w-system"""
 
-        F = np.zeros((2, self.vec_num_points))
+        F = np.zeros((2, 2 * self.vec_num_points))
 
         F[0, self.vec_num_points - 1] = 1.0
         F[1, self._num_points - 1] = 1.0
@@ -458,7 +451,10 @@ class NullControl(object):
     def _build_n_w(self):
         """Build the N_w matrix"""
 
-        F = self.F_plus_w.copy()
+        F = np.zeros((2, self.vec_num_points))
+        F[0, self.vec_num_points - 1] = 1
+        F[1, self._num_points - 1] = 1
+
         B = self.A_22_w.copy()
 
         A = -self._gamma**2 * B
@@ -625,7 +621,7 @@ class NullControl(object):
         left = np.zeros((1, self.vec_num_points))
         right = np.reshape(prod, (1, self.vec_num_points))
 
-        self.F_plus_z = -np.concatenate((left, right), axis=1)
+        self.F_plus_z = np.concatenate((left, right), axis=1)
 
     def _build_b_z(self):
         """Builds the B matrix for z-system control
@@ -653,7 +649,8 @@ class NullControl(object):
         F = self.F_plus_z.copy()
         M = self.M_z_inv.copy()
 
-        BF = sp.csc_matrix(B * F)
+        B_new = np.reshape(B, (2 * self.vec_num_points, 1))
+        BF = sp.csc_matrix(B_new * F)
         ABF = A + BF
 
         self.ABF_z = M * ABF
@@ -730,9 +727,7 @@ class NullControl(object):
         B = self.B_z
         u = self.u_z(t)
 
-        null = np.matmul(B, u)
-
-        return np.reshape(null, (2 * self.vec_num_points, ))
+        return B * u
 
     def control_z(self, t, z):
         """Determines the control term for z
