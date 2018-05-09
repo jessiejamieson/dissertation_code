@@ -145,7 +145,7 @@ class RK4(object):
                 K combination
         """
 
-        return (k1 + (k2 * 2.0) + (k3 * 2.0) + k4)
+        return k1 + (k2 * 2.0) + (k3 * 2.0) + k4
 
     def new(self, u, k1, k2, k3, k4):
         """Create new step from the 4 stages
