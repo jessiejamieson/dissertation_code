@@ -1525,7 +1525,7 @@ class FiniteElements(object):
 
         for index in range(self._num_points):
             block = sp.bmat([[ll[index], lh[index]],
-                             [hl[index], hh[index]]])
+                             [hl[index], hh[index]]]).tocsc()
             array_list.append(block)
 
         return array_list

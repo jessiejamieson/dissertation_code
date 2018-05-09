@@ -713,8 +713,7 @@ class FeedbackControl(object):
         zeros = np.zeros((self.vec_num_points, ))
 
         for index, A_k in enumerate(array):
-            A = A_k.tocsc()
-            temp = A * z0
+            temp = A_k * z0
             term = np.dot(w1, temp)
             coupling[index] = -term
 
@@ -736,7 +735,6 @@ class FeedbackControl(object):
         if self._use_coupling:
             coupling = self._coupling_w(z, w)
             return v + coupling
-            # return v
         else:
             return v
 
@@ -762,9 +760,7 @@ class FeedbackControl(object):
         zeros = np.zeros((self.vec_num_points, ))
 
         for index, A_k in enumerate(array):
-            A = A_k.toarray()
-            A = A_k.tocsc()
-            temp = A * w
+            temp = A_k * w
             coupling[index] = np.dot(v, temp)
 
         return np.concatenate((coupling, zeros))
@@ -784,7 +780,6 @@ class FeedbackControl(object):
         if self._use_coupling:
             coupling = self._coupling_z(w)
             return z + coupling
-            # return z
         else:
             return z
 
