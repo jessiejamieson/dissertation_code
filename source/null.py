@@ -24,8 +24,7 @@ class NullControl(object):
             _num_steps  := number of time steps to take
             _delta_t    := amount of time to take in one timestep
 
-            _gamma := constant for w-system
-            _rho   := constant for w-system
+            _T := null control target time
 
             _init_v  := initial condition for v
             _init_w  := initial condition for w
@@ -41,7 +40,7 @@ class NullControl(object):
     """
 
     def __init__(self, num_points, delta_x, num_steps, delta_t,
-                 gamma, rho, T,
+                 T,
                  init_v, init_w, init_z0, init_z1,
                  g1, g2, m,
                  use_null, use_coupling):
@@ -50,8 +49,6 @@ class NullControl(object):
         self._num_steps = num_steps
         self._delta_t = delta_t
 
-        self._gamma = gamma
-        self._rho = rho
         self._T = T
 
         self._init_v = init_v
@@ -68,14 +65,14 @@ class NullControl(object):
 
     @classmethod
     def setup(cls, num_points, delta_x, num_steps, delta_t,
-              gamma, rho, T,
+              T,
               init_v, init_w, init_z0, init_z1,
               g1, g2, m,
               use_null, use_coupling):
         """Setup the system completely"""
 
         new = cls(num_points, delta_x, num_steps, delta_t,
-                  gamma, rho, T,
+                  T,
                   init_v, init_w, init_z0, init_z1,
                   g1, g2, m,
                   use_null, use_coupling)
@@ -140,12 +137,12 @@ class NullControl(object):
         self._build_b_z()
         self._build_abf_z()
         self._build_y0_z()
-        #
-        # print("Build the coupling_z")
-        # self._build_a110_z()
-        #
-        # print("Build the coupling_w")
-        # self._build_a200_w()
+
+        print("Build the coupling_z")
+        self._build_a110_z()
+
+        print("Build the coupling_w")
+        self._build_a200_w()
 
     def _build_solver(self):
         """Build the time-solver"""
@@ -756,3 +753,98 @@ class NullControl(object):
             null = [0.0, 0.0, 0.0, 0.0]
 
             return z, null
+
+    def _build_a200_w(self):
+        """Build the A_200 tensor for w-system"""
+
+        self.A_200_w = self._fem.A_200.copy()
+
+    def _coupling_w(self, z, w):
+        """Returns the coupling term for w-system
+
+            Args:
+                z := current z-system vector
+                w := current w-system vector
+
+            Returns:
+                coupling term
+        """
+
+        array = self.A_200_w
+
+        z0, z1 = self.split_eqn(z)
+        w0, w1 = self.split_eqn(w)
+
+        coupling = np.zeros((self.vec_num_points, ))
+        zeros = np.zeros((self.vec_num_points, ))
+
+        for index, A_k in enumerate(array):
+            temp = A_k * z0
+            term = np.dot(w1, temp)
+            coupling[index] = -term
+
+        return np.concatenate((coupling, zeros))
+
+    def coupling_w(self, t, v, z, w):
+        """Add coupling term for w-system
+
+            Args:
+                t := current time
+                v := current vector
+                z := current z-system vec
+                w := current w-system vec
+
+            Returns:
+                w modified by coupling
+        """
+
+        if self._use_coupling:
+            coupling = self._coupling_w(z, w)
+            return v + coupling
+        else:
+            return v
+
+    def _build_a110_z(self):
+        """Build the A_110 tensor for z-system"""
+
+        self.A_110_z = self._fem.A_110.copy()
+
+    def _coupling_z(self, u):
+        """Returns the coupling term for z-system
+
+            Args:
+                u := the w-system vector
+
+            Returns:
+                coupling term
+        """
+
+        array = self.A_110_z
+        v, w = self.split_eqn(u)
+
+        coupling = np.zeros((self.vec_num_points, ))
+        zeros = np.zeros((self.vec_num_points, ))
+
+        for index, A_k in enumerate(array):
+            temp = A_k * w
+            coupling[index] = np.dot(v, temp)
+
+        return np.concatenate((coupling, zeros))
+
+    def coupling_z(self, t, z, w):
+        """Add coupling term for z-system
+
+            Args:
+                t := current time
+                z := current z-system vec
+                w := current w-system vec
+
+            Returns:
+                z modified by coupling
+        """
+
+        if self._use_coupling:
+            coupling = self._coupling_z(w)
+            return z + coupling
+        else:
+            return z
