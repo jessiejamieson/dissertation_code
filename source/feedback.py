@@ -407,11 +407,11 @@ class FeedbackControl(object):
 
         A = self.A_10_z.copy()
 
-        A_top = A.copy().transpose()
-        A_bottom = -A.copy()
+        top = A.copy().transpose()
+        bottom = -A.copy()
 
-        self.A_z = sp.bmat([[None,     A_top],
-                            [A_bottom, None]]).tocsc()
+        self.A_z = sp.bmat([[None,   top],
+                            [bottom, None]]).tocsc()
 
     def _build_a00_z(self):
         """Build the A_00 matrix for z-system
