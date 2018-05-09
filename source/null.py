@@ -848,3 +848,166 @@ class NullControl(object):
             return z + coupling
         else:
             return z
+
+    def rhs_w(self, t, z, w):
+        """Computes the right hand side of equation for w-system
+
+            Args:
+                t := current time
+                z := current z-system vec
+                w := current w-system vec
+
+            Returns:
+                w rhs
+        """
+
+        M = self.M_w
+        A = self.A_w
+
+        v0 = A * w
+
+        v1, storage = self.control_w(t, v0)
+
+        b = self.coupling_w(t, v1, z, w)
+
+        return lin.spsolve(M, b), storage
+
+    def rhs_z(self, t, z, w):
+        """Computes the right hand side of equation for z-system
+
+            Args:
+                t := current time
+                z := current z-system vec
+                w := current w-system vec
+
+            Returns:
+                z rhs
+        """
+
+        M = self.M_z
+        A = self.A_z
+
+        v0 = A * z
+
+        v1, storage = self.control_z(t, v0)
+
+        b = self.coupling_z(t, v1, w)
+
+        return lin.spsolve(M, b), storage
+
+    def rhs(self, t, u):
+        """Computes the right hand side of whole system
+
+            Args:
+                t := current time
+                u := current system vec
+
+            Returns:
+                rhs
+        """
+
+        z, w = self.split_solution(u)
+
+        new_z, storage_z = self.rhs_z(t, z, w)
+        new_w, storage_w = self.rhs_w(t, z, w)
+
+        return np.concatenate((new_z, new_w)), storage_z, storage_w
+
+    def step(self, t, u):
+        """Computes the new step for whole system
+
+            Args:
+                t := current time
+                u := current system vec
+
+            Returns:
+                new system vec, storage_z, storage_w
+        """
+
+        return self._solver(self.rhs, t, u, usereverse=True)
+
+    def energy_w(self, w):
+        """Calculates the energy for w-system
+
+            Args:
+                w := current system vec
+
+            Returns:
+                energy for w
+        """
+
+        E = self.E_w
+        v = E * w
+        value = np.dot(w, v)
+
+        return 0.5 * value
+
+    def energy_z(self, z):
+        """Calculates the energy for z-system
+
+            Args:
+                z := current system vec
+
+            Returns:
+                energy for z
+        """
+
+        M = self.M_z
+        v = M * z
+        value = np.dot(z, v)
+
+        return 0.5 * value
+
+    def energy(self, u):
+        """Calculates all of the energies
+
+            Args:
+                u := current system vec
+
+            Returns:
+                energy for z, energy for w, total energy
+        """
+
+        z, w = self.split_solution(u)
+
+        e_z = self.energy_z(z)
+        e_w = self.energy_w(w)
+
+        return e_z, e_w, e_z + e_w
+
+    def run(self):
+        """Run the solver"""
+
+        storage_z = []
+        storage_w = []
+
+        solution = np.zeros((self._num_steps + 1, 4 * self.vec_num_points))
+        solution[0, :] = np.concatenate((self.init_z, self.init_w))
+
+        e_z = np.zeros((self._num_steps + 1, 1))
+        e_w = np.zeros((self._num_steps + 1, 1))
+        e_t = np.zeros((self._num_steps + 1, 1))
+
+        e_z[0], e_w[0], e_t[0] = self.energy(solution[0, :])
+
+        if self._use_null:
+            step_str = "Step null: "
+        else:
+            step_str = "Step: "
+
+        t = 0.0
+        for index in range(self._num_steps):
+            print(step_str + str(index + 1))
+
+            t += self._delta_t
+            u = solution[index, :]
+
+            new, s_z, s_w = self.step(t, u)
+
+            solution[index + 1, :] = new
+            storage_z.extend(s_z)
+            storage_w.extend(s_w)
+
+            e_z[index + 1], e_w[index + 1], e_t[index + 1] = self.energy(new)
+
+        return solution, e_z, e_w, e_t, storage_z, storage_w
