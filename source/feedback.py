@@ -210,6 +210,8 @@ class FeedbackControl(object):
         self._build_a_z()
         self._build_a00_z()
         self._build_m_z()
+        self._build_a00_ez()
+        self._build_m_ez()
 
         print("Build the init_w")
         self._build_init_w0()
@@ -463,6 +465,28 @@ class FeedbackControl(object):
         A = self.A_00_z.copy()
 
         self.M_z = sp.bmat([[A,    None],
+                            [None, A]]).tocsc()
+
+    def _build_a00_ez(self):
+        """Build the A_00 matrix for z-system energy
+
+            A_00 -> identified for B.C.s
+        """
+
+        A = self._fem.A_00.copy().tolil()
+
+        self.A_00_ez = A.tocsc()
+
+    def _build_m_ez(self):
+        """Build the 'mass' matrix for z-system energy
+
+            M_ez = [[A_00_ez,      0],
+                   [     0, A_00_ez]]
+        """
+
+        A = self.A_00_ez.copy()
+
+        self.M_ez = sp.bmat([[A,    None],
                             [None, A]]).tocsc()
 
     def _build_init_w0(self):
@@ -975,7 +999,7 @@ class FeedbackControl(object):
                 energy for z
         """
 
-        M = self.M_z
+        M = self.M_ez
         v = M * z
         value = np.dot(z, v)
 

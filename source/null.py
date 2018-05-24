@@ -640,37 +640,6 @@ class NullControl(object):
         else:
             return self.control_w_reverse(t, w)
 
-    def control_z_reverse(self, t, z):
-        """Determines the reverse control term for z
-
-            Args:
-                t := current timestep value
-                z := current value of system
-
-            Returns:
-                w modified by the control term
-        """
-
-        null = self._storage_z.pop()
-
-        return z - null, null
-
-    def control_z(self, t, z):
-        """Determines the control term for z
-
-            Args:
-                t := current timestep value
-                z := current value of system
-
-            Returns:
-                z modified by the control term
-        """
-
-        if self._is_forward:
-            return self.control_z_forward(t, z)
-        else:
-            return self.control_z_reverse(t, z)
-
     def _build_m_z_inv(self):
         """Build the inverse of M for z-system"""
 
@@ -826,6 +795,37 @@ class NullControl(object):
             null = [0.0, 0.0, 0.0, 0.0]
 
             return z, null
+
+    def control_z_reverse(self, t, z):
+        """Determines the reverse control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                w modified by the control term
+        """
+
+        null = self._storage_z.pop()
+
+        return z + null, null
+
+    def control_z(self, t, z):
+        """Determines the control term for z
+
+            Args:
+                t := current timestep value
+                z := current value of system
+
+            Returns:
+                z modified by the control term
+        """
+
+        if self._is_forward:
+            return self.control_z_forward(t, z)
+        else:
+            return self.control_z_reverse(t, z)
 
     def _build_a200_w(self):
         """Build the A_200 tensor for w-system"""

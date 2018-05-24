@@ -4,8 +4,8 @@ class InitV(object):
     def __call__(self, x):
         """Run the function"""
 
-        # return 5.0 * x**2
-        return 0.01 * x**2
+        return 5.0 * x**2
+        #return 0.01 * x**2
 
 
 class InitW(object):
@@ -14,8 +14,9 @@ class InitW(object):
     def __call__(self, x):
         """Run the function"""
 
-        # return 5.0 * x**3
-        return 0.01 * x**3
+        return 5.0 * x**3
+        #return 0.01 * x**3
+        #return 5.0 * x**2
 
 
 class InitZ0(object):
@@ -24,8 +25,9 @@ class InitZ0(object):
     def __call__(self, x):
         """Run the function"""
 
-        # return x**3
-        return 0.01 * x**3
+        return x**3
+        #return 0.01 * x**2
+        #return 0.0
 
 
 class InitZ1(object):
@@ -34,8 +36,9 @@ class InitZ1(object):
     def __call__(self, x):
         """Run the function"""
 
-        # return x
-        return 0.01 * x
+        return x
+        #return 0.01 * x ** 2
+        #return 0.0
 
 
 class G1(object):

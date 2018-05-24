@@ -8,18 +8,18 @@ if __name__ == '__main__':
     print("Running the feedback system")
 
     use_feedback = True
-    use_coupling = True
-    use_reverse = True
+    use_coupling = False
+    use_reverse = False
 
-    epsilon = 0.01
-    max_steps = 100000
+    epsilon = 0.001
+    max_steps = 50000
 
     num_points = 11
     delta_x = 1.0 / (num_points - 1)
 
     delta_t = 1.0 / 10.0 * delta_x
 
-    num_steps = 1000
+    num_steps = 4000
 
     gamma = 0.1
     rho = gamma**2
@@ -75,38 +75,38 @@ if __name__ == '__main__':
 
     plt.subplot(1, 3, 1)
     plt.ylim([min_z - lower_plot, max_z + upper_plot])
-    plt.plot(e_z)
+    plt.plot(e_z, linewidth=1.5)
     z_title = 'Energy for z-system'
     if use_feedback:
         z_title += ', with feedback'
     if use_coupling:
         z_title += ', with coupling'
     plt.title(z_title)
-    plt.xlabel('timestep')
-    plt.ylabel('energy')
+    plt.xlabel('Timestep')
+    plt.ylabel('Energy')
 
     plt.subplot(1, 3, 2)
     plt.ylim([min_w - lower_plot, max_w + upper_plot])
-    plt.plot(e_w)
+    plt.plot(e_w, linewidth=1.5)
     w_title = 'Energy for w-system'
     if use_feedback:
         w_title += ', with feedback'
     if use_coupling:
         w_title += ', with coupling'
     plt.title(w_title)
-    plt.xlabel('timestep')
-    plt.ylabel('energy')
+    plt.xlabel('Timestep')
+    plt.ylabel('Energy')
 
     plt.subplot(1, 3, 3)
     plt.ylim([min_t - lower_plot, max_t + upper_plot])
-    plt.plot(e_t)
-    t_title = 'Energy for t-system'
+    plt.plot(e_t, linewidth=1.5)
+    t_title = 'Total energy for system'
     if use_feedback:
         t_title += ', with feedback'
     if use_coupling:
         t_title += ', with coupling'
     plt.title(t_title)
-    plt.xlabel('timestep')
-    plt.ylabel('energy')
+    plt.xlabel('Timestep')
+    plt.ylabel('Energy')
 
     plt.show(block=False)

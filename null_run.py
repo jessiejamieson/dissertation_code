@@ -10,7 +10,7 @@ if __name__ == '__main__':
     use_null = True
     use_coupling = True
 
-    T = 3.0
+    T = 10.0
 
     num_points = 11
     delta_x = 1.0 / (num_points - 1)
